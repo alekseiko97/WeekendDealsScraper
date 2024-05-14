@@ -1,99 +1,135 @@
 import requests
 from bs4 import BeautifulSoup
 from selenium.webdriver.chrome.options import Options  # Import Options
-import html5lib
-import time
-
+import telebot
+from modules import offer_parser, telegram_notifier
+from datetime import date
+import calendar
 from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 
-    # Set up Chrome Options
+# Constants
+URL = "https://www.azair.eu/"
+# TODO: make token an environment variable
+# BOT_TOKEN = os.environ.get('BOT_TOKEN')
+CHAT_ID = 324109540
+YEAR = 2024
+
+# Set up Chrome Options
 options = Options()
 options.add_argument("--ignore-certificate-errors")  # Add this line to ignore SSL errors
-# options.add_argument("--headless")  # Optional: Run Chrome in headless mode (without GUI)
+options.add_argument("--headless")  # Optional: Run Chrome in headless mode (without GUI)
+
+# Initialize bot
+BOT = telebot.TeleBot("6824381438:AAFaoV_9QF8trD56obqJL5BsPSDY3xMG_8o")
 
 # Set up the Selenium WebDriver with Chrome Options
-web_driver = webdriver.Chrome(options=options)
-    
-# web_driver = webdriver.Chrome("C:\\Users\\Aleksei\\Downloads\\chromedriver-win64\\chromedriver-win64\\chromedriver.exe")
+driver = webdriver.Chrome(options=options)
 
-class Offer:
-    origin_airport = ""
-    destination_airport = ""
-    outbound_date = ""
-    outbound_departure_time = 0
-    outbound_changes = 0
-    outbound_price = 0
+def get_distinct_months(current_date=date.today(), num_months=12):
+    distinct_months = set()  # Using a set to store unique month+YEAR combinations
     
-    inbound_date = ""
-    inbound_departure_time = 0
-    inbound_changes = 0
-    inbound_price = 0
+    current_month = current_date.month  # Get the current month
     
+    for _ in range(num_months):
+        if current_month > 12:
+            current_month -= 12  # Adjust month if it exceeds 12
+        
+        # Create a string representing the month and YEAR, e.g., "202405"
+        month_year = f"{current_date.year}{current_month:02d}"
+        
+        # Check if the month is equal to or after the current month
+        if int(month_year) >= int(current_date.strftime("%Y%m")):
+            distinct_months.add(month_year)  # Add the month+YEAR combination to the set
+        
+        current_month += 1  # Move to the next month
+    
+    # Convert the set to a list and sort it to ensure the months are in ascending order
+    return sorted(list(distinct_months))
 
-def main():
-    URL = "https://www.azair.eu/"
+def get_weekends(month=date.today().month):
+    weekends = []
+    c = calendar.TextCalendar(calendar.MONDAY)
     
-    web_driver.get(URL)
+    days = c.itermonthdays(YEAR, month)
+    start_day = None
     
-    # TODO: tweak input parameters
+    for i in days: # calendar constructs months with leading zeros (days belonging to the previous month)
+        if i != 0:
+            day = date(YEAR, month, i)
+            if day >= date.today() and (day.weekday() == 0 or day.weekday() == 4): # Friday to Monday
+                if start_day is None:
+                    start_day = day
+                elif day.weekday() == 0: # Monday
+                    weekends.append((start_day.day, day.day))
+                    start_day = None
+                
+    return weekends
+
+def initialize_driver(url):
+    driver = webdriver.Chrome(options=options)
+    driver.get(url)
+    return driver                
+
+def scrape_results(url):
+    page = requests.get(url)
+    soup = BeautifulSoup(page.content, 'html.parser')
+    return soup
+
+def parse_results(soup):
+    results = soup.find_all('div', class_='result')
+    return results
+
+def send_notification(offer):
+    # Implement your notification logic here
+    pass
+
+def main():    
+    driver = initialize_driver(URL)
     
-    send_button = web_driver.find_element(By.CSS_SELECTOR, "input[class='bt blue']")
-    
-    send_button.click()
-    
-    # page containing search results
-    get_url = web_driver.current_url
-    
-    # parse result page
+    # tick the checkbox "take me anywhere"
+    take_me_anywhere = driver.find_element(By.CSS_SELECTOR, "input[name='anywhere']")
+    take_me_anywhere.click()
+           
+    # parse and work with the search page                        
+    get_url = driver.current_url
     page = requests.get(get_url)
     soup = BeautifulSoup(page.content, 'html5lib')
     
-    # get the whole set of results
-    soup.find('body', class_="results")
+    # get list of distinct months concatenated with the (current) YEAR, e.g. 202406
+    distinct_month_list = get_distinct_months()
+    print(distinct_month_list)
     
-    # get specific results
-    sections = soup.find_all('div', class_='result')
+    # get all weekend dates (+- 1 day) in the current month
+    weekends = get_weekends()
+    print(weekends)
     
-    prices = []
-    for section in sections:
-        offer = Offer()
-        
-        outbound_date = section.find('span', class_='date')
-        
-        print(f'outbound date: {outbound_date.get_text()}')
-        
-        departure_time = section.find('span', class_='from').find('strong')
-        
-        print (f'departure time: {departure_time.get_text()}')
-        
-        origin_airport = section.find('span', class_='code')
-        
-        print (f'origin airport code: {origin_airport.get_text()}')
-        
-        outbound_price = section.find('span', class_='subPrice')
-        
-        print(outbound_price.get_text())
-        
-        to = section.find('span', class_='to')
-        
-        print(to.get_text())
-        
-        print('-------------')
-        print()
-        
-        
-        
+    # find 'departure month' date selector and set the month
+    depmonth_tag = soup.find('select', {'name' : 'depmonth'})
+    option_value = distinct_month_list[1]
+    option_tag = depmonth_tag.find('option', {'value': option_value})
+    print(option_tag)
     
+    # TODO: set month and dates 
     
-    # TODO: click on "Do not consent" button
+    # simulate 'Search' button click
+    send_button = driver.find_element(By.CSS_SELECTOR, "input[class='bt blue']")
+    send_button.click()
+
+    # parse result page
+    soup = scrape_results(driver.current_url)
+    results = soup.find_all('div', class_='result')
     
-    #print(soup.select('div.searchBox'))
+    for result in results:
+        offer = offer_parser.parse_offer(result)
+        telegram_notifier.send_notification(offer, BOT, CHAT_ID)
+        
+        # TODO: make sure to send an offer once
+        # this can be achieved by storing them in the database 
     
     # Close the browser
-    #web_driver.quit()
-    # print [a.text for a in soup.select('div.searchBox')] 
+    driver.quit()
+
 
 if __name__ == "__main__":
     main()
