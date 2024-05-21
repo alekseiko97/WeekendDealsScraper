@@ -172,7 +172,7 @@ def main():
                 for detail in flight_details:
                     offer = offer_parser.parse_offer(detail)
                     if offer is not None:
-                        results.append({'Departure Date' : dep_date, 'Arrival Date' : arr_date, 'Origin': offer.origin_airport, 'Destination': offer.destination_airport})
+                        results.append({'Departure Date' : offer.outbound_date, 'Outbound Departure Time': offer.outbound_departure_time, 'Arrival Date' : offer.inbound_date, 'Inbound Departure Time': offer.inbound_departure_time, 'Origin': offer.origin_airport, 'Destination': offer.destination_airport, 'Total Price': offer.total_price})
                 
     # Convert results list to DataFrame
     results_df = pd.DataFrame(results)    

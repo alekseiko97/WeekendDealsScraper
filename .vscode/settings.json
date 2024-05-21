@@ -1,4 +1,8 @@
 {
     "python.pythonPath": "C:/Users/Aleksei/Desktop/WeekendDealsScraper/Scripts/python.exe",
-    "justMyCode": false
+    "justMyCode": false,
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnSave": true
+      }
 }

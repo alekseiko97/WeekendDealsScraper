@@ -7,6 +7,8 @@ def send_notification(offer, bot, chat_id):
     # TODO: fix calculation below, currently two strings are being concatenated
     total_price = float(offer.outbound_price.strip("€")) + float(offer.inbound_price.strip("€"))
     
+    offer.total_price = total_price
+    
     message = (
     f"We found a great weekend escape deal!\n\n"
     f"Departure: {offer.origin_airport} ({offer.outbound_departure_time})\n"
