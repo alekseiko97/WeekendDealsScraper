@@ -6,25 +6,26 @@ from modules import offer_parser, telegram_notifier
 from datetime import date
 import calendar
 from selenium import webdriver
-from selenium.webdriver.common.by import By
+from urllib.parse import urlparse, parse_qs, urlencode
+import pandas as pd
+from openpyxl.workbook import Workbook
 
 # Constants
-URL = "https://www.azair.eu/"
+URL = "https://www.azair.eu/azfin.php"
 # TODO: make token an environment variable
 # BOT_TOKEN = os.environ.get('BOT_TOKEN')
 CHAT_ID = 324109540
 YEAR = 2024
 
 # Set up Chrome Options
-options = Options()
-options.add_argument("--ignore-certificate-errors")  # Add this line to ignore SSL errors
-options.add_argument("--headless")  # Optional: Run Chrome in headless mode (without GUI)
+# options = Options()
+#options.add_argument("--ignore-certificate-errors")  # Add this line to ignore SSL errors
+# options.add_argument("--headless")  # Optional: Run Chrome in headless mode (without GUI)
+# Set up the Selenium WebDriver with Chrome Options
+# driver = webdriver.Chrome(options=options)
 
 # Initialize bot
 BOT = telebot.TeleBot("6824381438:AAFaoV_9QF8trD56obqJL5BsPSDY3xMG_8o")
-
-# Set up the Selenium WebDriver with Chrome Options
-driver = webdriver.Chrome(options=options)
 
 def get_distinct_months(current_date=date.today(), num_months=12):
     distinct_months = set()  # Using a set to store unique month+YEAR combinations
@@ -64,37 +65,80 @@ def get_weekends(month=date.today().month):
                     weekends.append((start_day.day, day.day))
                     start_day = None
                 
-    return weekends
+    return weekends           
 
-def initialize_driver(url):
-    driver = webdriver.Chrome(options=options)
-    driver.get(url)
-    return driver                
+def scrape_flight_details(url):
+    response = requests.get(url)
+    if response.status_code == 200: # OK
+        soup = BeautifulSoup(response.content, 'html.parser')
+        flight_details = soup.find_all('div', class_='result')
+        return flight_details
+    else:
+        print("Error:", response.status_code)
+        return None
+    
 
-def scrape_results(url):
-    page = requests.get(url)
-    soup = BeautifulSoup(page.content, 'html.parser')
-    return soup
-
-def parse_results(soup):
-    results = soup.find_all('div', class_='result')
-    return results
+def parse_flight_details(soup):
+    flight_details = soup.find_all('div', class_='result')
+    return flight_details
 
 def send_notification(offer):
     # Implement your notification logic here
     pass
 
+# TODO: compare parsed price from Azair with the price obtained through Ryanair API (if it's Ryanair airline)
+def get_leg_price_from_ryanair(price):
+    pass
+
+# entry point
 def main():    
-    driver = initialize_driver(URL)
-    
-    # tick the checkbox "take me anywhere"
-    take_me_anywhere = driver.find_element(By.CSS_SELECTOR, "input[name='anywhere']")
-    take_me_anywhere.click()
-           
-    # parse and work with the search page                        
-    get_url = driver.current_url
-    page = requests.get(get_url)
-    soup = BeautifulSoup(page.content, 'html5lib')
+    # Original query parameters
+    original_params = {
+        "searchtype": "flexi",
+        "tp": "0",
+        "isOneway": "return",
+        "srcAirport": "Amsterdam [AMS] (+EIN,NRN,BRU,DUS,CRL)",
+        "srcap0": "EIN",
+        "srcap1": "NRN",
+        "srcap2": "BRU",
+        "srcap4": "DUS",
+        "srcap6": "CRL",
+        "srcFreeAirport": "",
+        "srcTypedText": "amsterda",
+        "srcFreeTypedText": "",
+        "srcMC": "",
+        "dstAirport": "Anywhere [XXX]",
+        "anywhere": "true",
+        "dstTypedText": "anywhere",
+        "dstFreeTypedText": "",
+        "dstMC": "",
+        "depmonth": "202405",
+        "depdate": "2024-05-17",
+        "aid": "0",
+        "arrmonth": "202405",
+        "arrdate": "2024-05-20",
+        "minDaysStay": "2",
+        "maxDaysStay": "4",
+        "dep4": "true",
+        "dep5": "true",
+        "arr0": "true",
+        "arr6": "true",
+        "wizzxclub": "true",
+        "minHourStay": "0:45",
+        "maxHourStay": "23:20",
+        "minHourOutbound": "0:00",
+        "maxHourOutbound": "24:00",
+        "minHourInbound": "0:00",
+        "maxHourInbound": "24:00",
+        "autoprice": "true",
+        "adults": "1",
+        "children": "0",
+        "infants": "0",
+        "maxChng": "1",
+        "currency": "EUR",
+        "lang": "en",
+        "indexSubmit": "Search"
+    }
     
     # get list of distinct months concatenated with the (current) YEAR, e.g. 202406
     distinct_month_list = get_distinct_months()
@@ -104,31 +148,56 @@ def main():
     weekends = get_weekends()
     print(weekends)
     
-    # find 'departure month' date selector and set the month
-    depmonth_tag = soup.find('select', {'name' : 'depmonth'})
-    option_value = distinct_month_list[1]
-    option_tag = depmonth_tag.find('option', {'value': option_value})
-    print(option_tag)
-    
-    # TODO: set month and dates 
-    
-    # simulate 'Search' button click
-    send_button = driver.find_element(By.CSS_SELECTOR, "input[class='bt blue']")
-    send_button.click()
+    # Generate URLs with different departure and arrival dates
+    departure_dates = ["20240525"]  # Example: Different departure dates
+    arrival_dates = ["20240530"]  # Example: Different arrival dates
 
-    # parse result page
-    soup = scrape_results(driver.current_url)
-    results = soup.find_all('div', class_='result')
+    # Create a list to store the results
+    results = []
     
-    for result in results:
-        offer = offer_parser.parse_offer(result)
-        telegram_notifier.send_notification(offer, BOT, CHAT_ID)
+    for dep_date in departure_dates:
+        for arr_date in arrival_dates:
+            # Update departure and arrival dates in query parameters
+            params = original_params.copy()
+            params["depdate"] = dep_date
+            params["arrdate"] = arr_date
+            
+            # Construct URL with updated parameters
+            updated_url = URL + "?" + urlencode(params)
+            
+            # Scrape result page
+            flight_details = scrape_flight_details(updated_url)
+            
+            if flight_details:
+                for detail in flight_details:
+                    offer = offer_parser.parse_offer(detail)
+                    if offer is not None:
+                        results.append({'Departure Date' : dep_date, 'Arrival Date' : arr_date, 'Origin': offer.origin_airport, 'Destination': offer.destination_airport})
+                
+    # Convert results list to DataFrame
+    results_df = pd.DataFrame(results)    
+
+    file_path = 'flight_results.xlsx'
+                    
+    # Save results to Excel file
+    results_df.to_excel(file_path, index=False, header=True)
+    
+    # Indicate that the file has been created
+    print(f"File '{file_path}' has been created successfully.")
+    #telegram_notifier.send_notification(file_path, BOT, CHAT_ID)
+    
+    # for result in flight_details:
+    #     offer = offer_parser.parse_offer(result)
         
-        # TODO: make sure to send an offer once
-        # this can be achieved by storing them in the database 
-    
-    # Close the browser
-    driver.quit()
+    #     # TODO: generate an Excel file containing flight offers and notify with a single message in Telegram bot
+        
+    #     if offer is not None:
+    #         telegram_notifier.send_notification(offer, BOT, CHAT_ID)
+            
+    #         break
+        
+    #     # TODO: make sure to send an offer once
+    #     # this can be achieved by storing them in the database 
 
 
 if __name__ == "__main__":

@@ -1,10 +1,11 @@
 # modules/telegram_notifier.py
+import decimal
 
 def send_notification(offer, bot, chat_id):
     # Construct notification message
     
     # TODO: fix calculation below, currently two strings are being concatenated
-    total_price = offer.outbound_price + offer.inbound_price
+    total_price = float(offer.outbound_price.strip("€")) + float(offer.inbound_price.strip("€"))
     
     message = (
     f"We found a great weekend escape deal!\n\n"
