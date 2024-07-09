@@ -9,6 +9,7 @@ from selenium import webdriver
 from urllib.parse import urlparse, parse_qs, urlencode
 import pandas as pd
 from openpyxl.workbook import Workbook
+import streamlit as st
 
 # Constants
 URL = "https://www.azair.eu/azfin.php"
@@ -62,7 +63,11 @@ def get_weekends(month=date.today().month):
                 if start_day is None:
                     start_day = day
                 elif day.weekday() == 0: # Monday
-                    weekends.append((start_day.day, day.day))
+                    start_date = start_day.strftime("%Y%m%d")
+                    end_date = day.strftime("%Y%m%d")
+                    
+                    weekends.append((start_date, end_date))
+                    
                     start_day = None
                 
     return weekends           
@@ -141,26 +146,21 @@ def main():
     }
     
     # get list of distinct months concatenated with the (current) YEAR, e.g. 202406
-    distinct_month_list = get_distinct_months()
-    print(distinct_month_list)
+    #distinct_month_list = get_distinct_months()
+    #print(distinct_month_list)
     
     # get all weekend dates (+- 1 day) in the current month
     weekends = get_weekends()
     print(weekends)
     
-    # Generate URLs with different departure and arrival dates
-    departure_dates = ["20240525"]  # Example: Different departure dates
-    arrival_dates = ["20240530"]  # Example: Different arrival dates
-
     # Create a list to store the results
     results = []
     
-    for dep_date in departure_dates:
-        for arr_date in arrival_dates:
+    for date_range in weekends:
             # Update departure and arrival dates in query parameters
             params = original_params.copy()
-            params["depdate"] = dep_date
-            params["arrdate"] = arr_date
+            params["depdate"] = date_range[0]
+            params["arrdate"] = date_range[1]
             
             # Construct URL with updated parameters
             updated_url = URL + "?" + urlencode(params)
@@ -181,6 +181,8 @@ def main():
                     
     # Save results to Excel file
     results_df.to_excel(file_path, index=False, header=True)
+    
+    results_df
     
     # Indicate that the file has been created
     print(f"File '{file_path}' has been created successfully.")
