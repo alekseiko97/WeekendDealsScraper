@@ -95,6 +95,10 @@ def send_notification(offer):
 def get_leg_price_from_ryanair(price):
     pass
 
+# TODO: check the price prediction on airhint 
+def buy_or_wait(offer):
+    pass
+
 # entry point
 def main():    
     # Original query parameters
@@ -145,10 +149,6 @@ def main():
         "indexSubmit": "Search"
     }
     
-    # get list of distinct months concatenated with the (current) YEAR, e.g. 202406
-    #distinct_month_list = get_distinct_months()
-    #print(distinct_month_list)
-    
     # get all weekend dates (+- 1 day) in the current month
     weekends = get_weekends()
     print(weekends)
@@ -172,7 +172,7 @@ def main():
                 for detail in flight_details:
                     offer = offer_parser.parse_offer(detail)
                     if offer is not None:
-                        results.append({'Departure Date' : offer.outbound_date, 'Outbound Departure Time': offer.outbound_departure_time, 'Arrival Date' : offer.inbound_date, 'Inbound Departure Time': offer.inbound_departure_time, 'Origin': offer.origin_airport, 'Destination': offer.destination_airport, 'Total Price': offer.total_price})
+                        results.append({'Departure Date' : offer.outbound_date, 'Outbound Departure Time': offer.outbound_departure_time, 'Arrival Date' : offer.inbound_date, 'Outbound airline:' : offer.outbound_airline, 'Inbound Departure Time': offer.inbound_departure_time, 'Origin': offer.origin_airport, 'Destination': offer.destination_airport, 'Inbound airline:': offer.inbound_airline, 'Total Price': offer.total_price})
                 
     # Convert results list to DataFrame
     results_df = pd.DataFrame(results)    

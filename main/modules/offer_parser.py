@@ -8,10 +8,12 @@ class Offer:
         self.outbound_departure_time = ""
         self.outbound_arrival_time = "" # TODO
         self.outbound_price = ""
+        self.outbound_airline = "" # TODO
         self.inbound_date = ""
         self.inbound_departure_time = ""
         self.inbound_arrival_time = "" # TODO
         self.inbound_price = ""
+        self.inbound_airline = "" # TODO
         self.total_price = 0.0
 
 def parse_offer(result):
@@ -21,6 +23,11 @@ def parse_offer(result):
         offer = Offer()
         
         text_div = result.find('div', class_='text')
+        
+        details = result.find_all('div', class_='detail')
+        
+        outbound_details = details[0].find('p')
+        inbound_details = details[1].find('p')
         
         if text_div:
             detail_lines = text_div.find_all('p')
@@ -40,17 +47,19 @@ def parse_offer(result):
                             offer.outbound_date = outbound.find('span', class_='date').get_text()
                             offer.outbound_departure_time = outbound.find('span', class_='from').find('strong').get_text()
                             offer.outbound_price = outbound.find('span', class_='subPrice').get_text()
+                            offer.outbound_airline = outbound_details.find('span', class_='airline').get_text()
                                 
                     # Parse outbound details
                     for p in detail_lines:
                         back = p.find('span', class_='caption sem')
-                        if back:
+                        if back: 
                             inbound = back.find_parent('p')
                             if inbound:
                                 # Inbound
                                 offer.inbound_date = inbound.find('span', class_='date').get_text()
                                 offer.inbound_departure_time = inbound.find('span', class_='from').find('strong').get_text()
                                 offer.inbound_price = inbound.find('span', class_='subPrice').get_text()
+                                offer.inbound_airline = inbound_details.find('span', class_='airline').get_text()
                     
                     # Calculate total price (return)
                     total_price = float(offer.outbound_price.strip("€")) + float(offer.inbound_price.strip("€"))
