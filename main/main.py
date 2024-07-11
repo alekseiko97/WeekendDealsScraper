@@ -18,13 +18,6 @@ URL = "https://www.azair.eu/azfin.php"
 CHAT_ID = 324109540
 YEAR = 2024
 
-# Set up Chrome Options
-# options = Options()
-#options.add_argument("--ignore-certificate-errors")  # Add this line to ignore SSL errors
-# options.add_argument("--headless")  # Optional: Run Chrome in headless mode (without GUI)
-# Set up the Selenium WebDriver with Chrome Options
-# driver = webdriver.Chrome(options=options)
-
 # Initialize bot
 BOT = telebot.TeleBot("6824381438:AAFaoV_9QF8trD56obqJL5BsPSDY3xMG_8o")
 
@@ -182,25 +175,11 @@ def main():
     # Save results to Excel file
     results_df.to_excel(file_path, index=False, header=True)
     
+    # Display results in web using streamlit 
     results_df
     
     # Indicate that the file has been created
     print(f"File '{file_path}' has been created successfully.")
-    #telegram_notifier.send_notification(file_path, BOT, CHAT_ID)
-    
-    # for result in flight_details:
-    #     offer = offer_parser.parse_offer(result)
-        
-    #     # TODO: generate an Excel file containing flight offers and notify with a single message in Telegram bot
-        
-    #     if offer is not None:
-    #         telegram_notifier.send_notification(offer, BOT, CHAT_ID)
-            
-    #         break
-        
-    #     # TODO: make sure to send an offer once
-    #     # this can be achieved by storing them in the database 
-
 
 if __name__ == "__main__":
     main()
