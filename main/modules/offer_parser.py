@@ -3,7 +3,9 @@
 class Offer:
     def __init__(self):
         self.origin_airport = ""
-        self.destination_airport = ""
+        self.origin_airport_code = "" # TODO
+        self.destination_airport = "" 
+        self.destination_airport_code = "" # TODO
         self.outbound_date = ""
         self.outbound_departure_time = ""
         self.outbound_arrival_time = "" # TODO
