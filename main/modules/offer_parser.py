@@ -39,7 +39,7 @@ def parse_offer(result):
                 offer.origin_airport = outbound.find('span', class_='from').get_text().split()[1]
                 offer.destination_airport = outbound.find('span', class_='to').get_text().split()[1] # Also contains time, therefore [1]
 
-                # Parse inbound details
+                # Parse outbound details
                 for p in detail_lines:
                     there = p.find('span', class_='caption tam')
                     if there:
@@ -48,10 +48,13 @@ def parse_offer(result):
                             # Outbound
                             offer.outbound_date = outbound.find('span', class_='date').get_text()
                             offer.outbound_departure_time = outbound.find('span', class_='from').find('strong').get_text()
+                            offer.destination_airport_code = outbound.find('span', class_='to').find('span', class_='code').contents[0].strip()
+                            if outbound.find('span', class_='from').find('span', class_='code'):
+                                offer.origin_airport_code = outbound.find('span', class_='from').find('span', class_='code').contents[0].strip()
                             offer.outbound_price = outbound.find('span', class_='subPrice').get_text()
                             offer.outbound_airline = outbound_details.find('span', class_='airline').get_text()
                                 
-                    # Parse outbound details
+                    # Parse inbound details
                     for p in detail_lines:
                         back = p.find('span', class_='caption sem')
                         if back: 
@@ -59,7 +62,7 @@ def parse_offer(result):
                             if inbound:
                                 # Inbound
                                 offer.inbound_date = inbound.find('span', class_='date').get_text()
-                                offer.inbound_departure_time = inbound.find('span', class_='from').find('strong').get_text()
+                                offer.inbound_departure_time = inbound.find('span', class_='to').get_text()[0]
                                 offer.inbound_price = inbound.find('span', class_='subPrice').get_text()
                                 offer.inbound_airline = inbound_details.find('span', class_='airline').get_text()
                     
@@ -69,6 +72,7 @@ def parse_offer(result):
                     
                     return offer
             else:
+                # TODO: add logging
                 print("Insufficient detail lines for offer")
         else:
             print("Text div not found for offer")

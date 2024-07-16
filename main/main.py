@@ -1,4 +1,5 @@
 import requests
+import datetime
 from bs4 import BeautifulSoup
 from selenium.webdriver.chrome.options import Options  # Import Options
 import telebot
@@ -13,6 +14,10 @@ import streamlit as st
 import logging
 import requests
 import json
+import aiohttp
+import asyncio
+from streamlit_dynamic_filters import DynamicFilters
+from concurrent.futures import ThreadPoolExecutor
 # from dotenv import load_dotenv
 
 # Load environment variables
@@ -88,7 +93,6 @@ def scrape_flight_details(url):
         return flight_details
     except requests.exceptions.RequestException as e:
         logger.error(e)
-        print("Error scraping {url}: {e}")
         return None
     
 
@@ -96,61 +100,36 @@ def parse_flight_details(soup):
     flight_details = soup.find_all('div', class_='result')
     return flight_details
 
-# TODO: compare parsed price from Azair with the price obtained through Ryanair API (if it's Ryanair airline)
-def get_leg_price_from_ryanair_api(offer) -> float:
-    url = 'https://services-api.ryanair.com/farfnd/3/oneWayFares'
-
-    # Define the parameters
-    params = {
-        'departureAirportIataCode': offer.origin_airport_code,
-        'arrivalAirportIataCode': offer.destination_airport_code,
-        'language': 'en',
-        'market': 'en-gb',
-        'offset': 0,
-        'outboundDepartureDateFrom': offer.outbound_date, # format: YYYY-MM-DD
-        'outboundDepartureDateTo': offer.outbound_date
-    }
-    
-    try:
-        # Make the GET request
-        response = requests.get(url, params=params)
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        
-        # Parse the JSON response
-        data = response.json()
-        
-        # Check if 'fares' exists and is a list with at least one element
-        if 'fares' in data and isinstance(data['fares'], list) and len(data['fares']) > 0:
-            # Check if 'outbound' and 'price' keys exist
+async def fetch_price(session, url, params):
+    async with session.get(url, params=params) as response:
+        response.raise_for_status()
+        data = await response.json()
+        if 'fares' in data and isinstance(data['fares'], list) and len(data['fares']):
             if 'outbound' in data['fares'][0] and 'price' in data['fares'][0]['outbound']:
-                # Extract the price value
-                price_value = data['fares'][0]['outbound']['price']['value']
-                return price_value
-            else:
-                raise ValueError("The 'outbound' or 'price' key is missing in the first fare.")
-        else:
-            raise ValueError("The 'fares' key is missing, not a list, or the list is empty.")
+                return data['fares'][0]['outbound']['price']['value']
+        return None
+
+# TODO: compare parsed price from Azair with the price obtained through Ryanair API (if it's Ryanair airline)
+async def get_leg_price_from_ryanair_api(offers):
+    url = 'https://services-api.ryanair.com/farfnd/3/oneWayFares'
     
-    except requests.RequestException as e:
-        # Handle HTTP errors or network issues
-        print(f"Request failed: {e}")
-        logger.error(f"Request failed: {e}")
-    except json.JSONDecodeError:
-        # Handle JSON parsing errors
-        print("Invalid JSON response.")
-        logger.error(f"Invalid JSON response.")
-    except ValueError as ve:
-        # Handle specific value errors
-        print(ve)
-        logger.error(ve)
-    except Exception as e:
-        # Handle any other exceptions
-        print(f"An unexpected error occurred: {e}")
-        logger.error(f"An unexpected error occurred: {e}")
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        for offer in offers:
+            date = datetime.datetime.strptime(offer.outbound_date.split()[1], '%d/%m/%y').strftime('%Y-%m-%d')
 
-    # Return a default value or raise an exception if needed
-    return None
-
+            # Define the parameters
+            params = {
+                'departureAirportIataCode': offer.origin_airport_code,
+                'arrivalAirportIataCode': offer.destination_airport_code,
+                'language': 'en',
+                'market': 'en-gb',
+                'offset': 0,
+                'outboundDepartureDateFrom': date,
+                'outboundDepartureDateTo': date
+            }
+            tasks.append(fetch_price(session, url, params))
+        return await asyncio.gather(*tasks)
 
 # TODO: check the price prediction on airhint 
 def buy_or_wait(offer):
@@ -163,6 +142,7 @@ def update_params(params, depdate, arrdate):
 
 def process_weekends(weekends, original_params):
     results = []
+    offers = []
     for date_range in weekends:
         updated_url = update_params(original_params.copy(), date_range[0], date_range[1])
         flight_details = scrape_flight_details(updated_url)
@@ -171,12 +151,15 @@ def process_weekends(weekends, original_params):
             for detail in flight_details:
                 offer = offer_parser.parse_offer(detail)
                 if offer:
+                    offers.append(offer)
+        
+        if offers:
+            ryanair_prices = asyncio.run(get_leg_price_from_ryanair_api(offers))            
                     
-                    ryanair_outbound_price = 0
-                    ryanair_inbound_price = 0
-                    #if offer.outbound_airline == "Ryanair" or offer.inbound_airline == "Ryanair":
-                        
-                    results.append({
+            for i, offer in enumerate(offers):
+                ryanair_outbound_price = ryanair_prices[i] if offer.outbound_airline == "Ryanair" else None        
+                    
+                results.append({
                         'Departure Date': offer.outbound_date,
                         'Outbound Departure Time': offer.outbound_departure_time,
                         'Outbound Airline': offer.outbound_airline,
@@ -187,23 +170,22 @@ def process_weekends(weekends, original_params):
                         'Inbound Departure Time': offer.inbound_departure_time,
                         'Inbound Airline': offer.inbound_airline,
                         'Inbound Price (Azair)': offer.inbound_price,
-                        'Ryanair Inbound Actual Price (if applicable)': ryanair_inbound_price,  # Make sure you have this variable if used
+                        'Ryanair Inbound Actual Price (if applicable)': None,  # Make sure you have this variable if used
                         
                         'Origin': offer.origin_airport,
+                        'Origin airport code': offer.origin_airport_code,
                         'Destination': offer.destination_airport,
+                        'Destination airport code': offer.destination_airport_code,
                         'Total Price': offer.total_price
                     })
     
     return results
-           
-mock_offer = MockOffer.MockOffer("CRL", "RIX", "2024-08-06") 
 
-actual_price = get_leg_price_from_ryanair_api(mock_offer)         
-
-print("price: " + str(actual_price))
 
 # entry point
 def main():    
+    st.title("Flight results")
+    
     # Original query parameters
     original_params = {
         "searchtype": "flexi",
@@ -267,11 +249,15 @@ def main():
     # Save results to Excel file
     results_df.to_excel(file_path, index=False, header=True)
     
+    dynamic_filters = DynamicFilters(df=results_df, filters=['Outbound Airline'])
+    
+    dynamic_filters.display_filters()
     # Display results in web using streamlit 
-    results_df
+    dynamic_filters.display_df()
     
     # Indicate that the file has been created
     logger.info(f"File '{file_path}' has been created successfully.")
 
+# entry point
 if __name__ == "__main__":
     main()
